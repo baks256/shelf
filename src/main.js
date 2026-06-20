@@ -2,6 +2,9 @@ import "./style.css";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import YAML from "yaml";
+import { basicSetup, EditorView } from "codemirror";
+import { yaml as yamlLanguage } from "@codemirror/lang-yaml";
+import { foldAll, unfoldAll } from "@codemirror/language";
 
 const MM_TO_M = 0.001;
 const DEFAULT_BOARD_THICKNESS = 18 * MM_TO_M;
@@ -9,11 +12,13 @@ const DOOR_GAP = 0.012;
 
 const canvas = document.querySelector("#wardrobeCanvas");
 const editor = document.querySelector("#configEditor");
+const editorHost = document.querySelector("#configEditorHost");
 const statusEl = document.querySelector("#configStatus");
 const fileInput = document.querySelector("#configFile");
 const downloadButton = document.querySelector("#downloadConfig");
 const toggleEditorButton = document.querySelector("#toggleEditor");
 const productTabsEl = document.querySelector("#productTabs");
+const editorToolsEl = document.querySelector("#editorTools");
 const detailTitleEl = document.querySelector("#detailTitle");
 const detailDrawingEl = document.querySelector("#detailDrawing");
 const detailSpecsEl = document.querySelector("#detailSpecs");
@@ -59,6 +64,7 @@ let currentConfigText = "";
 let currentConfig = null;
 let activeProductId = "";
 let debounceTimer = 0;
+let editorView = null;
 let rendererWidth = 0;
 let rendererHeight = 0;
 let clickableDoors = [];
@@ -95,12 +101,14 @@ const materialLibrary = {
     metalness: 0.42,
   }),
   blackMetal: new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.7, metalness: 0.22 }),
+  latticeMetal: new THREE.MeshStandardMaterial({ color: 0xcfcfca, roughness: 0.84, metalness: 0.04 }),
   paper: makeSketchMaterial(0xffffff, 0x111111, 0.035),
   charcoal: new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.82 }),
   ceramic: makeSketchMaterial(0xf0f0ea, 0x111111, 0.04),
 };
 
 setupScene();
+setupConfigEditor();
 loadDefaultConfig();
 scheduleRender();
 
@@ -120,30 +128,55 @@ toggleEditorButton.addEventListener("click", () => {
 });
 downloadButton.addEventListener("click", downloadConfig);
 fileInput.addEventListener("change", loadConfigFile);
-editor.addEventListener("input", () => {
-  currentConfigText = editor.value;
-  statusEl.textContent = "Проверяю...";
-  statusEl.classList.remove("error");
-  clearTimeout(debounceTimer);
-  debounceTimer = window.setTimeout(() => applyConfigText(editor.value), 350);
-});
-
 async function loadDefaultConfig() {
   const response = await fetch("/wardrobe.yaml");
   const text = await response.text();
   currentConfigText = text;
-  editor.value = text;
+  setConfigEditorText(text);
   applyConfigText(text);
+}
+
+function setupConfigEditor() {
+  editorView = new EditorView({
+    parent: editorHost,
+    doc: "",
+    extensions: [
+      basicSetup,
+      yamlLanguage(),
+      EditorView.lineWrapping,
+      EditorView.updateListener.of((update) => {
+        if (!update.docChanged) return;
+        const text = update.state.doc.toString();
+        editor.value = text;
+        currentConfigText = text;
+        statusEl.textContent = "Проверяю...";
+        statusEl.classList.remove("error");
+        clearTimeout(debounceTimer);
+        debounceTimer = window.setTimeout(() => applyConfigText(text), 350);
+      }),
+    ],
+  });
+}
+
+function setConfigEditorText(text) {
+  editor.value = text;
+  if (!editorView) return;
+  editorView.dispatch({
+    changes: { from: 0, to: editorView.state.doc.length, insert: text },
+  });
 }
 
 function applyConfigText(text) {
   try {
-    const config = YAML.parse(text);
-    validateConfig(config);
+    const config = resolveConfigRefs(YAML.parse(normalizeConfigReferenceSyntax(text)));
+    const nextActiveProductId = getInitialActiveProductId(config);
+    const activeConfig = getProductConfigById(config, nextActiveProductId);
+    validateConfig(activeConfig);
     currentConfig = config;
-    activeProductId = getInitialActiveProductId(config);
+    activeProductId = nextActiveProductId;
     renderActiveProduct();
     renderProductTabs(config);
+    renderEditorTools(config);
     statusEl.textContent = "Конфиг применен";
     statusEl.classList.remove("error");
   } catch (error) {
@@ -152,12 +185,42 @@ function applyConfigText(text) {
   }
 }
 
+function normalizeConfigReferenceSyntax(text) {
+  return text.replace(/(:\s*)(@[A-Za-z0-9_.-]+)(\s*(?:#.*)?$)/gm, '$1"$2"$3');
+}
+
 function getInitialActiveProductId(config) {
   const products = getProducts(config);
   const urlTab = new URLSearchParams(window.location.search).get("tab");
   if (urlTab && products.some((product) => product.id === urlTab)) return urlTab;
   if (activeProductId && products.some((product) => product.id === activeProductId)) return activeProductId;
   return config.activeProduct ?? products[0]?.id ?? "";
+}
+
+function resolveConfigRefs(value, root = value) {
+  if (typeof value === "string" && value.startsWith("@")) return resolveConfigRef(root, value);
+  if (Array.isArray(value)) return value.map((item) => resolveConfigRefs(item, root));
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      key === "products" && Array.isArray(item)
+        ? item.map((product) => resolveConfigRefs(product, product))
+        : resolveConfigRefs(item, root),
+    ]),
+  );
+}
+
+function resolveConfigRef(root, ref) {
+  const rawPath = ref.slice(1).split(".");
+  const path = rawPath[0] === "vars" || !root?.vars ? rawPath : ["vars", ...rawPath];
+  let current = root;
+  for (const part of path) {
+    current = current?.[part];
+    if (current === undefined) throw new Error(`Не найдена переменная ${ref}.`);
+  }
+  if (typeof current === "string" && current.startsWith("@")) return resolveConfigRef(root, current);
+  return current;
 }
 
 function validateConfig(config) {
@@ -234,6 +297,8 @@ function renderWardrobe(config) {
   registerHoverDetail(addPanel(sideT, height, depth, [-left - sideT / 2, bottom + height / 2, 0], carcass, "right-side"), "Правая боковина", sideT, height, depth, "Правая вертикальная боковая деталь корпуса.");
   registerHoverDetail(addPanel(width, height, backT, [0, bottom + height / 2, backZ + backT / 2], back, "back"), "Задник", width, height, backT, "Задняя панель корпуса.");
 
+  applyNamedBoardType(root.getObjectByName("bottom"), config.boardTypes?.bottom, width, bottomT, depth, bottom + bottomT + 0.003);
+
   addVerticalDividers(config, columnEdges, rowEdges, left, bottom + height, depth, carcass);
 
   addConfiguredRowShelves(config, columnEdges, rowEdges, left, depth, carcass);
@@ -258,17 +323,23 @@ function renderActiveProduct() {
 }
 
 function getActiveProductConfig(config) {
-  const product = getProducts(config).find((item) => item.id === activeProductId);
-  if (!product?.config) return config;
+  return getProductConfigById(config, activeProductId);
+}
+
+function getProductConfigById(config, productId) {
+  const product = getProducts(config).find((item) => item.id === productId);
+  if (!product) return config;
+  if (!product.config) return config;
   return {
-    ...config,
+    activeProduct: config.activeProduct,
+    products: config.products,
     ...product.config,
     materials: {
       ...(config.materials ?? {}),
       ...(product.config.materials ?? {}),
     },
     boardThickness: {
-      ...(typeof config.boardThickness === "object" ? config.boardThickness : { default: config.boardThickness }),
+      ...(typeof config.boardThickness === "object" ? config.boardThickness : config.boardThickness ? { default: config.boardThickness } : {}),
       ...(typeof product.config.boardThickness === "object" ? product.config.boardThickness : {}),
     },
   };
@@ -316,8 +387,96 @@ function addDoor(config, door, columnEdges, rowEdges, left, depth, doorMaterial)
   addSketchEdges(doorMesh, 0x0b0b0b, 0.78);
   doorGroup.add(doorMesh);
   clickableDoors.push(doorMesh);
+  Object.assign(doorMesh.userData.detail, getDoorDetailExtra(door, w, h));
+  if (isLatticeDoor(door)) {
+    doorMesh.visible = false;
+    addLatticeDoor(doorGroup, door, localX, w, h, doorT, doorMesh.userData.detail, section);
+  }
 
   addHandle(doorGroup, door, hingeSide, w, h, doorT);
+}
+
+function isLatticeDoor(door) {
+  return ["latticeX", "latticePlus", "latticeVertical", "latticeHorizontal"].includes(door.type);
+}
+
+function getDoorDetailExtra(door, width, height) {
+  if (!door.type) return {};
+  const frameT = Math.min(0.045, Math.max(0.026, Math.min(width, height) * 0.09));
+  const innerW = Math.max(0, width - frameT * 2);
+  const innerH = Math.max(0, height - frameT * 2);
+  const targetCell = Math.max(0.025, (door.cellSize ?? 50) * MM_TO_M);
+  return {
+    doorType: door.type,
+    latticeCellSize: Math.round(targetCell / MM_TO_M),
+    latticeCellsX: Math.max(1, door.cellsX ?? Math.round(innerW / targetCell)),
+    latticeCellsY: Math.max(1, door.cellsY ?? Math.round(innerH / targetCell)),
+  };
+}
+
+function markDoorPart(mesh, doorGroup, door, detail, section) {
+  mesh.userData.clickDoor = doorGroup;
+  mesh.userData.section = section;
+  mesh.userData.objectKey = `door:${door.id}`;
+  mesh.userData.detail = detail;
+}
+
+function addLatticeDoor(doorGroup, door, localX, width, height, doorT, detail, section) {
+  const frameT = Math.min(0.045, Math.max(0.026, Math.min(width, height) * 0.09));
+  const barT = Math.min(0.012, Math.max(0.006, Math.min(width, height) * 0.025));
+  const railMaterial = materialLibrary.latticeMetal;
+  const z = 0.001;
+
+  const addBar = (name, barWidth, barHeight, x, y, rotation = 0) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(barWidth, barHeight, doorT), railMaterial);
+    mesh.name = `${door.id}-${name}`;
+    mesh.position.set(localX + x, y, z);
+    mesh.rotation.z = rotation;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    markDoorPart(mesh, doorGroup, door, detail, section);
+    addSketchEdges(mesh, 0x0b0b0b, 0.38);
+    doorGroup.add(mesh);
+    clickableDoors.push(mesh);
+  };
+
+  addBar("left-frame", frameT, height, -width / 2 + frameT / 2, height / 2);
+  addBar("right-frame", frameT, height, width / 2 - frameT / 2, height / 2);
+  addBar("bottom-frame", width, frameT, 0, frameT / 2);
+  addBar("top-frame", width, frameT, 0, height - frameT / 2);
+
+  if (door.type === "latticeVertical") {
+    const count = door.bars ?? 4;
+    for (let i = 1; i < count; i += 1) {
+      addBar(`vertical-${i}`, barT, height - frameT * 2, -width / 2 + (width / count) * i, height / 2);
+    }
+  } else if (door.type === "latticeHorizontal") {
+    const count = door.bars ?? 3;
+    for (let i = 1; i < count; i += 1) {
+      addBar(`horizontal-${i}`, width - frameT * 2, barT, 0, (height / count) * i);
+    }
+  } else if (door.type === "latticePlus") {
+    addBar("vertical-center", barT, height - frameT * 2, 0, height / 2);
+    addBar("horizontal-center", width - frameT * 2, barT, 0, height / 2);
+  } else {
+    const innerW = width - frameT * 2;
+    const innerH = height - frameT * 2;
+    const targetCell = Math.max(0.025, (door.cellSize ?? 50) * MM_TO_M);
+    const cols = Math.max(1, door.cellsX ?? Math.round(innerW / targetCell));
+    const rows = Math.max(1, door.cellsY ?? Math.round(innerH / targetCell));
+    const cellW = innerW / cols;
+    const cellH = innerH / rows;
+    const diagonalLength = Math.hypot(cellW, cellH);
+    const angle = Math.atan2(cellH, cellW);
+    for (let yIndex = 0; yIndex < rows; yIndex += 1) {
+      const y = frameT + cellH * (yIndex + 0.5);
+      for (let xIndex = 0; xIndex < cols; xIndex += 1) {
+        const x = -innerW / 2 + cellW * (xIndex + 0.5);
+        addBar(`x-${xIndex}-${yIndex}-a`, barT, diagonalLength, x, y, Math.PI / 2 - angle);
+        addBar(`x-${xIndex}-${yIndex}-b`, barT, diagonalLength, x, y, -(Math.PI / 2 - angle));
+      }
+    }
+  }
 }
 
 function addTopPanel(config, columnEdges, left, width, thickness, depth, y, carcass) {
@@ -657,6 +816,7 @@ function addInternalElements(config, columnEdges, rowEdges, left, depth, carcass
     registerHoverShelf(shelf, y, { x0: span.x0, x1: span.x1, y0: y, y1: y }, item.id ?? "Полка");
     addSketchEdges(shelf, 0x0b0b0b, 0.7);
     root.add(shelf);
+    applyNamedBoardType(shelf, item.boardType, width, itemT, getInteriorPanelDepth(config, depth), y + itemT / 2 + 0.003);
   }
 }
 
@@ -914,6 +1074,150 @@ function addInnerShadow(x0, x1, y0, y1, depth, backT) {
   );
   plane.position.set((x0 + x1) / 2, (y0 + y1) / 2, -depth / 2 + backT + 0.002);
   root.add(plane);
+}
+
+function normalizeBoardType(value) {
+  if (!value) return null;
+  if (typeof value === "string") return { type: value };
+  return value;
+}
+
+function applyNamedBoardType(mesh, value, width, height, depth, y) {
+  const boardType = normalizeBoardType(value);
+  if (!mesh || !boardType?.type) return;
+  if (boardType.type === "latticeX") {
+    makeMeshInvisiblePickSurface(mesh);
+    addHorizontalBoardLattice(mesh, width, height, depth, boardType);
+  } else {
+    addHorizontalBoardPattern(mesh, width, depth, boardType, y);
+    addFrontBoardPattern(mesh, width, height, depth, boardType);
+  }
+  if (mesh.userData.detail) Object.assign(mesh.userData.detail, getBoardDetailExtra(boardType, width, depth));
+}
+
+function makeMeshInvisiblePickSurface(mesh) {
+  mesh.material = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+  });
+  for (const child of mesh.children) child.visible = false;
+}
+
+function getBoardDetailExtra(boardType, width, depth) {
+  if (!boardType?.type) return {};
+  const targetCell = Math.max(0.025, (boardType.cellSize ?? 50) * MM_TO_M);
+  return {
+    boardType: boardType.type,
+    boardCellSize: Math.round(targetCell / MM_TO_M),
+    boardCellsX: Math.max(1, boardType.cellsX ?? Math.round(width / targetCell)),
+    boardCellsY: Math.max(1, boardType.cellsY ?? Math.round(depth / targetCell)),
+  };
+}
+
+function addHorizontalBoardPattern(mesh, width, depth, boardType, y) {
+  if (boardType?.type !== "latticeX") return;
+  const targetCell = Math.max(0.025, (boardType.cellSize ?? 50) * MM_TO_M);
+  const cols = Math.max(1, boardType.cellsX ?? Math.round(width / targetCell));
+  const rows = Math.max(1, boardType.cellsY ?? Math.round(depth / targetCell));
+  const cellW = width / cols;
+  const cellD = depth / rows;
+  const x0 = mesh.position.x - width / 2;
+  const z0 = mesh.position.z - depth / 2;
+  const points = [];
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      const x = x0 + col * cellW;
+      const z = z0 + row * cellD;
+      points.push(new THREE.Vector3(x, y, z), new THREE.Vector3(x + cellW, y, z + cellD));
+      points.push(new THREE.Vector3(x + cellW, y, z), new THREE.Vector3(x, y, z + cellD));
+    }
+  }
+
+  const lines = new THREE.LineSegments(
+    new THREE.BufferGeometry().setFromPoints(points),
+    new THREE.LineBasicMaterial({ color: 0x666666, transparent: true, opacity: 0.75, depthWrite: false }),
+  );
+  lines.name = `${mesh.name}-board-pattern`;
+  root.add(lines);
+}
+
+function addHorizontalBoardLattice(mesh, width, height, depth, boardType) {
+  const targetCell = Math.max(0.025, (boardType.cellSize ?? 50) * MM_TO_M);
+  const cols = Math.max(1, boardType.cellsX ?? Math.round(width / targetCell));
+  const rows = Math.max(1, boardType.cellsY ?? Math.round(depth / targetCell));
+  const cellW = width / cols;
+  const cellD = depth / rows;
+  const frameT = Math.min(0.045, Math.max(0.018, Math.min(width, depth) * 0.055));
+  const barT = Math.min(0.012, Math.max(0.006, Math.min(cellW, cellD) * 0.18));
+  const mat = materialLibrary.latticeMetal;
+  const group = new THREE.Group();
+  group.name = `${mesh.name}-board-lattice`;
+  group.position.copy(mesh.position);
+  root.add(group);
+
+  const addBar = (name, barWidth, barDepth, x, z, rotationY = 0) => {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(barWidth, height, barDepth), mat);
+    bar.name = `${mesh.name}-${name}`;
+    bar.position.set(x, 0, z);
+    bar.rotation.y = rotationY;
+    bar.castShadow = true;
+    bar.receiveShadow = true;
+    addSketchEdges(bar, 0x0b0b0b, 0.38);
+    group.add(bar);
+  };
+
+  addBar("front-frame", width, frameT, 0, depth / 2 - frameT / 2);
+  addBar("back-frame", width, frameT, 0, -depth / 2 + frameT / 2);
+  addBar("left-frame", frameT, depth, -width / 2 + frameT / 2, 0);
+  addBar("right-frame", frameT, depth, width / 2 - frameT / 2, 0);
+
+  const innerW = width - frameT * 2;
+  const innerD = depth - frameT * 2;
+  const innerCellW = innerW / cols;
+  const innerCellD = innerD / rows;
+  const diagonalLength = Math.hypot(innerCellW, innerCellD);
+  const angle = Math.atan2(innerCellD, innerCellW);
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      const x = -innerW / 2 + innerCellW * (col + 0.5);
+      const z = -innerD / 2 + innerCellD * (row + 0.5);
+      addBar(`x-${col}-${row}-a`, diagonalLength, barT, x, z, -angle);
+      addBar(`x-${col}-${row}-b`, diagonalLength, barT, x, z, angle);
+    }
+  }
+}
+
+function addFrontBoardPattern(mesh, width, height, depth, boardType) {
+  if (boardType?.type !== "latticeX") return;
+  const targetCell = Math.max(0.025, (boardType.cellSize ?? 50) * MM_TO_M);
+  const cols = Math.max(1, boardType.cellsX ?? Math.round(width / targetCell));
+  const rows = Math.max(1, boardType.frontCellsY ?? Math.max(1, Math.round(height / Math.min(targetCell, height || targetCell))));
+  const cellW = width / cols;
+  const cellH = height / rows;
+  const x0 = mesh.position.x - width / 2;
+  const y0 = mesh.position.y - height / 2;
+  const z = mesh.position.z + depth / 2 + 0.004;
+  const points = [];
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      const x = x0 + col * cellW;
+      const y = y0 + row * cellH;
+      points.push(new THREE.Vector3(x, y, z), new THREE.Vector3(x + cellW, y + cellH, z));
+      points.push(new THREE.Vector3(x + cellW, y, z), new THREE.Vector3(x, y + cellH, z));
+    }
+  }
+
+  const lines = new THREE.LineSegments(
+    new THREE.BufferGeometry().setFromPoints(points),
+    new THREE.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.9, depthWrite: false }),
+  );
+  lines.name = `${mesh.name}-front-board-pattern`;
+  root.add(lines);
 }
 
 function addPanel(width, height, depth, position, mat, name) {
@@ -1391,12 +1695,16 @@ function sum(items, key) {
 
 function getProducts(config) {
   if (Array.isArray(config.products) && config.products.length > 0) {
-    return config.products.map((product, index) => ({
-      id: product.id ?? `product-${index}`,
-      name: product.name ?? product.label ?? product.id ?? `Изделие ${index + 1}`,
-      type: product.type ?? "wardrobe",
-      config: product.config,
-    }));
+    return config.products.map((product, index) => {
+      const id = product.id ?? `product-${index}`;
+      const productConfig = product.config ?? product;
+      return {
+        id,
+        name: product.name ?? product.label ?? id,
+        type: product.type ?? productConfig.type ?? "wardrobe",
+        config: productConfig,
+      };
+    });
   }
 
   return [
@@ -1426,6 +1734,51 @@ function renderProductTabs(config) {
     });
     productTabsEl.append(tab);
   }
+}
+
+function renderEditorTools(config) {
+  editorToolsEl.textContent = "";
+  const products = getProducts(config);
+  for (const product of products) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = product.name;
+    button.addEventListener("click", () => jumpToProductInEditor(product.id));
+    editorToolsEl.append(button);
+  }
+
+  const collapse = document.createElement("button");
+  collapse.type = "button";
+  collapse.textContent = "Свернуть";
+  collapse.addEventListener("click", () => {
+    if (editorView) foldAll(editorView);
+  });
+  editorToolsEl.append(collapse);
+
+  const expand = document.createElement("button");
+  expand.type = "button";
+  expand.textContent = "Развернуть";
+  expand.addEventListener("click", () => {
+    if (editorView) unfoldAll(editorView);
+  });
+  editorToolsEl.append(expand);
+}
+
+function jumpToProductInEditor(productId) {
+  if (!editorView) return;
+  const text = editorView.state.doc.toString();
+  const match = new RegExp(`(^|\\n)\\s*-\\s+id:\\s+${escapeRegExp(productId)}\\s*(\\n|$)`).exec(text);
+  if (!match) return;
+  const pos = match.index + match[1].length;
+  editorView.dispatch({
+    selection: { anchor: pos },
+    effects: EditorView.scrollIntoView(pos, { y: "start" }),
+  });
+  editorView.focus();
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function frameCamera(config) {
@@ -1689,6 +2042,8 @@ function updateDetailPanel(detail) {
 
 function detailSvg(detail) {
   if (detail.notchWidth && detail.notchDepth) return detailCutoutSvg(detail);
+  if (detail.boardType?.startsWith("lattice")) return detailBoardTypeSvg(detail);
+  if (detail.doorType?.startsWith("lattice")) return detailLatticeSvg(detail);
 
   const w = Math.max(1, detail.width);
   const h = Math.max(1, detail.height || Math.round(detail.depth * 0.18) || 1);
@@ -1710,6 +2065,114 @@ function detailSvg(detail) {
       <line x1="${x - 24}" y1="${y}" x2="${x - 12}" y2="${y}" stroke="#111" stroke-width="1.5"/>
       <line x1="${x - 24}" y1="${y + rectH}" x2="${x - 12}" y2="${y + rectH}" stroke="#111" stroke-width="1.5"/>
       <text x="${x - 30}" y="${y + rectH / 2}" text-anchor="middle" font-size="15" font-weight="700" transform="rotate(-90 ${x - 30} ${y + rectH / 2})">${detail.height}</text>
+    </svg>
+  `;
+}
+
+function detailLatticeSvg(detail) {
+  const w = Math.max(1, detail.width);
+  const h = Math.max(1, detail.height);
+  const viewW = 280;
+  const viewH = 210;
+  const scale = Math.min(180 / w, 96 / h);
+  const rectW = Math.max(36, w * scale);
+  const rectH = Math.max(18, h * scale);
+  const x = (viewW - rectW) / 2;
+  const y = 32;
+  const frame = Math.max(3, Math.min(8, Math.min(rectW, rectH) * 0.09));
+  const innerX = x + frame;
+  const innerY = y + frame;
+  const innerW = Math.max(1, rectW - frame * 2);
+  const innerH = Math.max(1, rectH - frame * 2);
+  const cols = Math.max(1, detail.latticeCellsX ?? Math.round(w / (detail.latticeCellSize ?? 50)));
+  const rows = Math.max(1, detail.latticeCellsY ?? Math.round(h / (detail.latticeCellSize ?? 50)));
+  const cellW = innerW / cols;
+  const cellH = innerH / rows;
+  const latticeLines = [];
+
+  if (detail.doorType === "latticeVertical") {
+    for (let i = 1; i < cols; i += 1) {
+      const px = innerX + cellW * i;
+      latticeLines.push(`<line x1="${px}" y1="${innerY}" x2="${px}" y2="${innerY + innerH}" stroke="#555" stroke-width="1"/>`);
+    }
+  } else if (detail.doorType === "latticeHorizontal") {
+    for (let i = 1; i < rows; i += 1) {
+      const py = innerY + cellH * i;
+      latticeLines.push(`<line x1="${innerX}" y1="${py}" x2="${innerX + innerW}" y2="${py}" stroke="#555" stroke-width="1"/>`);
+    }
+  } else if (detail.doorType === "latticePlus") {
+    latticeLines.push(`<line x1="${innerX + innerW / 2}" y1="${innerY}" x2="${innerX + innerW / 2}" y2="${innerY + innerH}" stroke="#555" stroke-width="1"/>`);
+    latticeLines.push(`<line x1="${innerX}" y1="${innerY + innerH / 2}" x2="${innerX + innerW}" y2="${innerY + innerH / 2}" stroke="#555" stroke-width="1"/>`);
+  } else {
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < cols; col += 1) {
+        const cx = innerX + cellW * col;
+        const cy = innerY + cellH * row;
+        latticeLines.push(`<line x1="${cx}" y1="${cy}" x2="${cx + cellW}" y2="${cy + cellH}" stroke="#555" stroke-width="0.9"/>`);
+        latticeLines.push(`<line x1="${cx + cellW}" y1="${cy}" x2="${cx}" y2="${cy + cellH}" stroke="#555" stroke-width="0.9"/>`);
+      }
+    }
+  }
+
+  return `
+    <svg viewBox="0 0 ${viewW} ${viewH}" role="img" aria-label="Р§РµСЂС‚РµР¶ СЂРµС€РµС‚С‡Р°С‚РѕР№ РґРІРµСЂС†С‹">
+      <rect x="${x}" y="${y}" width="${rectW}" height="${rectH}" fill="#f7f7f2" stroke="#111" stroke-width="2"/>
+      <rect x="${innerX}" y="${innerY}" width="${innerW}" height="${innerH}" fill="none" stroke="#111" stroke-width="1"/>
+      ${latticeLines.join("")}
+      <line x1="${x}" y1="${y + rectH + 18}" x2="${x + rectW}" y2="${y + rectH + 18}" stroke="#111" stroke-width="1.5"/>
+      <line x1="${x}" y1="${y + rectH + 12}" x2="${x}" y2="${y + rectH + 24}" stroke="#111" stroke-width="1.5"/>
+      <line x1="${x + rectW}" y1="${y + rectH + 12}" x2="${x + rectW}" y2="${y + rectH + 24}" stroke="#111" stroke-width="1.5"/>
+      <text x="${viewW / 2}" y="${y + rectH + 38}" text-anchor="middle" font-size="15" font-weight="700">${detail.width}</text>
+      <line x1="${x - 18}" y1="${y}" x2="${x - 18}" y2="${y + rectH}" stroke="#111" stroke-width="1.5"/>
+      <line x1="${x - 24}" y1="${y}" x2="${x - 12}" y2="${y}" stroke="#111" stroke-width="1.5"/>
+      <line x1="${x - 24}" y1="${y + rectH}" x2="${x - 12}" y2="${y + rectH}" stroke="#111" stroke-width="1.5"/>
+      <text x="${x - 30}" y="${y + rectH / 2}" text-anchor="middle" font-size="15" font-weight="700" transform="rotate(-90 ${x - 30} ${y + rectH / 2})">${detail.height}</text>
+      <text x="${viewW / 2}" y="${viewH - 10}" text-anchor="middle" font-size="11" font-weight="700">${detail.doorType} / ${detail.latticeCellSize}</text>
+    </svg>
+  `;
+}
+
+function detailBoardTypeSvg(detail) {
+  const w = Math.max(1, detail.width);
+  const d = Math.max(1, detail.depth);
+  const viewW = 280;
+  const viewH = 210;
+  const scale = Math.min(190 / w, 92 / d);
+  const rectW = Math.max(40, w * scale);
+  const rectD = Math.max(18, d * scale);
+  const x = (viewW - rectW) / 2;
+  const y = 34;
+  const cols = Math.max(1, detail.boardCellsX ?? Math.round(w / (detail.boardCellSize ?? 50)));
+  const rows = Math.max(1, detail.boardCellsY ?? Math.round(d / (detail.boardCellSize ?? 50)));
+  const cellW = rectW / cols;
+  const cellD = rectD / rows;
+  const lines = [];
+
+  if (detail.boardType === "latticeX") {
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < cols; col += 1) {
+        const cx = x + col * cellW;
+        const cy = y + row * cellD;
+        lines.push(`<line x1="${cx}" y1="${cy}" x2="${cx + cellW}" y2="${cy + cellD}" stroke="#555" stroke-width="0.8"/>`);
+        lines.push(`<line x1="${cx + cellW}" y1="${cy}" x2="${cx}" y2="${cy + cellD}" stroke="#555" stroke-width="0.8"/>`);
+      }
+    }
+  }
+
+  return `
+    <svg viewBox="0 0 ${viewW} ${viewH}" role="img" aria-label="Р§РµСЂС‚РµР¶ РґРѕСЃРєРё СЃ С‚РёРїРѕРј">
+      <rect x="${x}" y="${y}" width="${rectW}" height="${rectD}" fill="#f7f7f2" stroke="#111" stroke-width="2"/>
+      ${lines.join("")}
+      <line x1="${x}" y1="${y + rectD + 18}" x2="${x + rectW}" y2="${y + rectD + 18}" stroke="#111" stroke-width="1.5"/>
+      <line x1="${x}" y1="${y + rectD + 12}" x2="${x}" y2="${y + rectD + 24}" stroke="#111" stroke-width="1.5"/>
+      <line x1="${x + rectW}" y1="${y + rectD + 12}" x2="${x + rectW}" y2="${y + rectD + 24}" stroke="#111" stroke-width="1.5"/>
+      <text x="${viewW / 2}" y="${y + rectD + 38}" text-anchor="middle" font-size="15" font-weight="700">${detail.width}</text>
+      <line x1="${x - 18}" y1="${y}" x2="${x - 18}" y2="${y + rectD}" stroke="#111" stroke-width="1.5"/>
+      <line x1="${x - 24}" y1="${y}" x2="${x - 12}" y2="${y}" stroke="#111" stroke-width="1.5"/>
+      <line x1="${x - 24}" y1="${y + rectD}" x2="${x - 12}" y2="${y + rectD}" stroke="#111" stroke-width="1.5"/>
+      <text x="${x - 30}" y="${y + rectD / 2}" text-anchor="middle" font-size="15" font-weight="700" transform="rotate(-90 ${x - 30} ${y + rectD / 2})">${detail.depth}</text>
+      <text x="${viewW / 2}" y="${viewH - 24}" text-anchor="middle" font-size="11" font-weight="700">${detail.boardType} / ${detail.boardCellSize}</text>
+      <text x="${viewW / 2}" y="${viewH - 10}" text-anchor="middle" font-size="11" font-weight="700">толщина ${detail.height}</text>
     </svg>
   `;
 }
@@ -1924,7 +2387,7 @@ async function loadConfigFile(event) {
   if (!file) return;
   const text = await file.text();
   currentConfigText = text;
-  editor.value = text;
+  setConfigEditorText(text);
   applyConfigText(text);
   event.target.value = "";
 }

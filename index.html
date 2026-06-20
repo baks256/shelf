@@ -39,7 +39,9 @@
             Открыть
           </label>
         </div>
-        <textarea id="configEditor" spellcheck="false"></textarea>
+        <div id="editorTools" class="editor-tools" aria-label="Навигация по настройкам"></div>
+        <div id="configEditorHost" class="config-editor-host"></div>
+        <textarea id="configEditor" spellcheck="false" hidden></textarea>
         <div class="panel-footer">
           <span id="configStatus">Загрузка...</span>
           <button id="downloadConfig" type="button">Скачать YAML</button>

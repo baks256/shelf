@@ -1,129 +1,8 @@
 # Единицы измерения: миллиметры.
-# Ряды перечислены снизу вверх. Дверцы могут занимать несколько ячеек через rowSpan/colSpan.
-# dimensions — внешние габариты шкафа, уже с учетом толщины боковин, дна и крышки.
-# Толщину отдельной доски можно переопределить прямо на элементе через thickness.
-name: Шкаф 1700x2750x500
+# Ряды перечислены снизу вверх.
+# Переменные задаются в начале продукта в блоке vars и используются как @group.name.
+
 activeProduct: wardrobe
-products:
-  - id: wardrobe
-    name: Шкаф
-    type: wardrobe
-  - id: console
-    name: Консоль
-    type: console
-    config:
-      name: Консоль под телевизор 2300x300x450
-      dimensions:
-        width: 2300
-        height: 300
-        depth: 450
-      position:
-        floorOffset: 150
-      decorativeElements:
-        - id: console-wall-panel
-          type: wallPanel
-          width: 2300
-          height: 3000
-          thickness: 20
-          bottomFromFloor: 450
-          material: smokedOak
-        - id: tv-65
-          type: tv
-          width: 1450
-          height: 830
-          thickness: 20
-          bottomFromFloor: 900
-          material: blackMetal
-      columns:
-        - id: section-1
-          width: 575
-        - id: section-2
-          width: 575
-        - id: section-3
-          width: 575
-        - id: section-4
-          width: 575
-      verticalDividers:
-        - id: divider-1
-          colBoundary: 1
-          fromFloor: 0
-          toTop: 300
-        - id: divider-2
-          colBoundary: 2
-          fromFloor: 0
-          toTop: 300
-        - id: divider-3
-          colBoundary: 3
-          fromFloor: 0
-          toTop: 300
-      topCutouts:
-        - id: wire-cutout
-          col: 1
-          colSpan: 2
-          clearanceDepth: 10
-      rows:
-        - id: body
-          height: 300
-      doors:
-        - id: console-door-1
-          col: 0
-          row: 0
-          colSpan: 1
-          rowSpan: 1
-          handle: none
-        - id: console-door-4
-          col: 3
-          row: 0
-          colSpan: 1
-          rowSpan: 1
-          handle: none
-          swing: right
-      openCells:
-        - col: 1
-          row: 0
-        - col: 2
-          row: 0
-      internal:
-        - id: console-shelf-1
-          col: 0
-          row: 0
-          colSpan: 1
-          type: shelf
-          position: middle
-        - id: console-shelf-2
-          col: 1
-          row: 0
-          colSpan: 1
-          type: shelf
-          position: middle
-        - id: console-shelf-3
-          col: 2
-          row: 0
-          colSpan: 1
-          type: shelf
-          position: middle
-        - id: console-shelf-4
-          col: 3
-          row: 0
-          colSpan: 1
-          type: shelf
-          position: middle
-      baskets: null
-
-dimensions:
-  width: 1700
-  height: 2750
-  depth: 500
-
-boardThickness:
-  default: 18
-  sides: 18
-  top: 18
-  bottom: 18
-  shelves: 18
-  dividers: 18
-  back: 6
-  doors: 18
 
 materials:
   carcass: darkWalnut
@@ -133,152 +12,364 @@ materials:
   baskets: metalMeshBlack
   rail: brushedSteel
 
-columns:
-  - id: left-open
-    width: 566
-  - id: main-left
-    width: 567
-  - id: main-right
-    width: 567
+products:
+  - id: wardrobe
+    name: Шкаф
+    type: wardrobe
 
-verticalDividers:
-  - id: left-main-divider
-    colBoundary: 1
-    fromFloor: 0
-    toTop: 2750
+    vars:
+      size:
+        width: 1700
+        height: 2750
+        depth: 500
+      thickness:
+        default: 18
+        sides: 18
+        top: 18
+        bottom: 18
+        shelves: 18
+        dividers: 18
+        back: 6
+        doors: 18
+      rows:
+        lower: 600
+        shelf: 330
+        upper: 830
+      columns:
+        left: 566
+        main: 567
+      baskets:
+        height: 600
+      rail:
+        depthFromBack: 330
 
-  - id: basket-center-divider
-    colBoundary: 2
-    fromFloor: 0
-    toTop: 600
+    dimensions:
+      width: @size.width
+      height: @size.height
+      depth: @size.depth
 
-  - id: upper-center-divider
-    colBoundary: 2
-    fromFloor: 1920
-    toTop: 2750
+    boardThickness:
+      default: @thickness.default
+      sides: @thickness.sides
+      top: @thickness.top
+      bottom: @thickness.bottom
+      shelves: @thickness.shelves
+      dividers: @thickness.dividers
+      back: @thickness.back
+      doors: @thickness.doors
 
-rows:
-  - id: lower-left-door-and-baskets
-    height: 600
-  - id: open-shelf-1
-    height: 330
-  - id: open-shelf-2
-    height: 330
-  - id: open-shelf-3
-    height: 330
-  - id: open-shelf-4
-    height: 330
-  - id: upper-section
-    height: 830
+    columns:
+      - id: left-open
+        width: @columns.left
+      - id: main-left
+        width: @columns.main
+      - id: main-right
+        width: @columns.main
 
-doors:
-  - id: left-lower-door
-    col: 0
-    row: 0
-    colSpan: 1
-    rowSpan: 1
-    handle: right
+    rows:
+      - id: lower-left-door-and-baskets
+        height: @rows.lower
+      - id: open-shelf-1
+        height: @rows.shelf
+      - id: open-shelf-2
+        height: @rows.shelf
+      - id: open-shelf-3
+        height: @rows.shelf
+      - id: open-shelf-4
+        height: @rows.shelf
+      - id: upper-section
+        height: @rows.upper
 
-  - id: left-upper-door
-    col: 0
-    row: 5
-    colSpan: 1
-    rowSpan: 1
-    handle: none
+    verticalDividers:
+      - id: left-main-divider
+        colBoundary: 1
+        fromFloor: 0
+        toTop: @size.height
+      - id: basket-center-divider
+        colBoundary: 2
+        fromFloor: 0
+        toTop: @baskets.height
+      - id: upper-center-divider
+        colBoundary: 2
+        fromFloor: 1920
+        toTop: @size.height
 
-  - id: main-upper-left
-    col: 1
-    row: 5
-    colSpan: 1
-    rowSpan: 1
-    handle: none
-    swing: left
+    doors:
+      - id: left-lower-door
+        col: 0
+        row: 0
+        colSpan: 1
+        rowSpan: 1
+        handle: right
+      - id: left-upper-door
+        col: 0
+        row: 5
+        colSpan: 1
+        rowSpan: 1
+        handle: none
+      - id: main-upper-left
+        col: 1
+        row: 5
+        colSpan: 1
+        rowSpan: 1
+        handle: none
+        swing: left
+      - id: main-upper-right
+        col: 2
+        row: 5
+        colSpan: 1
+        rowSpan: 1
+        handle: none
+        swing: right
+      - id: main-lower-left
+        col: 1
+        row: 0
+        colSpan: 1
+        rowSpan: 5
+        handle: center
+        swing: left
+      - id: main-lower-right
+        col: 2
+        row: 0
+        colSpan: 1
+        rowSpan: 5
+        handle: center
+        swing: right
 
-  - id: main-upper-right
-    col: 2
-    row: 5
-    colSpan: 1
-    rowSpan: 1
-    handle: none
-    swing: right
+    openCells:
+      - col: 0
+        row: 1
+        items: books-vase
+        light: true
+      - col: 0
+        row: 2
+        items: audio-vase
+        light: true
+      - col: 0
+        row: 3
+        items: books-bowl
+        light: true
+      - col: 0
+        row: 4
+        items: books-vase
+        light: true
 
-  - id: main-lower-left
-    col: 1
-    row: 0
-    colSpan: 1
-    rowSpan: 5
-    handle: center
-    swing: left
+    internal:
+      - id: left-upper-middle-shelf
+        col: 0
+        row: 5
+        colSpan: 1
+        type: shelf
+        position: middle
+      - id: main-upper-middle-shelf
+        col: 1
+        row: 5
+        colSpan: 2
+        type: shelf
+        position: middle
+      - id: divider-between-upper-and-main
+        col: 1
+        row: 5
+        colSpan: 2
+        type: shelf
+        position: bottom
+      - id: shelf-above-baskets
+        col: 1
+        row: 0
+        colSpan: 2
+        type: shelf
+        heightFromFloor: @baskets.height
+      - id: hanging-rail-above-baskets
+        col: 1
+        row: 1
+        rowSpan: 4
+        colSpan: 2
+        type: rail
+        heightRatio: 0.9
+        depthFromBack: @rail.depthFromBack
+        material: brushedSteel
 
-  - id: main-lower-right
-    col: 2
-    row: 0
-    colSpan: 1
-    rowSpan: 5
-    handle: center
-    swing: right
+    baskets:
+      rows: 3
+      columns: 2
+      colStart: 1
+      colSpan: 2
+      heightFromFloorToTop: @baskets.height
+      material: metalMeshBlack
 
-openCells:
-  - col: 0
-    row: 1
-    items: books-vase
-    light: true
-  - col: 0
-    row: 2
-    items: audio-vase
-    light: true
-  - col: 0
-    row: 3
-    items: books-bowl
-    light: true
-  - col: 0
-    row: 4
-    items: books-vase
-    light: true
+  - id: console
+    name: Консоль
+    type: console
 
-internal:
-  - id: left-upper-middle-shelf
-    col: 0
-    row: 5
-    colSpan: 1
-    type: shelf
-    position: middle
+    vars:
+      size:
+        width: 2300
+        height: 300
+        depth: 450
+      section:
+        width: 575
+      position:
+        floorOffset: 150
+      panel:
+        width: 2300
+        height: 3000
+        thickness: 20
+        bottomFromFloor: 450
+      tv:
+        width: 1450
+        height: 830
+        thickness: 20
+        bottomFromFloor: 900
+      mesh:
+        cellSize: 50
+      cutout:
+        clearanceDepth: 10
+      thickness:
+        default: 18
+        sides: 18
+        top: 18
+        bottom: 18
+        shelves: 18
+        dividers: 18
+        back: 6
+        doors: 18
 
-  - id: main-upper-middle-shelf
-    col: 1
-    row: 5
-    colSpan: 2
-    type: shelf
-    position: middle
+    dimensions:
+      width: @size.width
+      height: @size.height
+      depth: @size.depth
 
-  - id: divider-between-upper-and-main
-    col: 1
-    row: 5
-    colSpan: 2
-    type: shelf
-    position: bottom
+    boardThickness:
+      default: @thickness.default
+      sides: @thickness.sides
+      top: @thickness.top
+      bottom: @thickness.bottom
+      shelves: @thickness.shelves
+      dividers: @thickness.dividers
+      back: @thickness.back
+      doors: @thickness.doors
 
-  - id: shelf-above-baskets
-    col: 1
-    row: 0
-    colSpan: 2
-    type: shelf
-    heightFromFloor: 600
+    position:
+      floorOffset: @position.floorOffset
 
-  - id: hanging-rail-above-baskets
-    col: 1
-    row: 1
-    rowSpan: 4
-    colSpan: 2
-    type: rail
-    heightRatio: 0.9
-    depthFromBack: 330
-    material: brushedSteel
+    boardTypes:
+      bottom:
+        type: latticeX
+        cellSize: @mesh.cellSize
 
-baskets:
-  rows: 3
-  columns: 2
-  colStart: 1
-  colSpan: 2
-  heightFromFloorToTop: 600
-  material: metalMeshBlack
+    decorativeElements:
+      - id: console-wall-panel
+        type: wallPanel
+        width: @panel.width
+        height: @panel.height
+        thickness: @panel.thickness
+        bottomFromFloor: @panel.bottomFromFloor
+        material: smokedOak
+      - id: tv-65
+        type: tv
+        width: @tv.width
+        height: @tv.height
+        thickness: @tv.thickness
+        bottomFromFloor: @tv.bottomFromFloor
+        material: blackMetal
+
+    columns:
+      - id: section-1
+        width: @section.width
+      - id: section-2
+        width: @section.width
+      - id: section-3
+        width: @section.width
+      - id: section-4
+        width: @section.width
+
+    rows:
+      - id: body
+        height: @size.height
+
+    verticalDividers:
+      - id: divider-1
+        colBoundary: 1
+        fromFloor: 0
+        toTop: @size.height
+      - id: divider-2
+        colBoundary: 2
+        fromFloor: 0
+        toTop: @size.height
+      - id: divider-3
+        colBoundary: 3
+        fromFloor: 0
+        toTop: @size.height
+
+    topCutouts:
+      - id: wire-cutout
+        col: 1
+        colSpan: 2
+        clearanceDepth: @cutout.clearanceDepth
+
+    doors:
+      - id: console-door-1
+        col: 0
+        row: 0
+        colSpan: 1
+        rowSpan: 1
+        handle: none
+      - id: console-door-2
+        col: 1
+        row: 0
+        colSpan: 1
+        rowSpan: 1
+        handle: none
+        swing: left
+      - id: console-door-3
+        col: 2
+        row: 0
+        colSpan: 1
+        rowSpan: 1
+        handle: none
+        swing: right
+      - id: console-door-4
+        col: 3
+        row: 0
+        colSpan: 1
+        rowSpan: 1
+        handle: none
+        swing: right
+
+    openCells:
+      - col: 1
+        row: 0
+      - col: 2
+        row: 0
+
+    internal:
+      - id: console-shelf-1
+        col: 0
+        row: 0
+        colSpan: 1
+        type: shelf
+        position: middle
+        boardType: &meshShelf
+          type: latticeX
+          cellSize: @mesh.cellSize
+      - id: console-shelf-2
+        col: 1
+        row: 0
+        colSpan: 1
+        type: shelf
+        position: middle
+        boardType: *meshShelf
+      - id: console-shelf-3
+        col: 2
+        row: 0
+        colSpan: 1
+        type: shelf
+        position: middle
+        boardType: *meshShelf
+      - id: console-shelf-4
+        col: 3
+        row: 0
+        colSpan: 1
+        type: shelf
+        position: middle
+        boardType: *meshShelf
