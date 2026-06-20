@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Wardrobe Configurator</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header">
+        <nav id="productTabs" class="product-tabs" aria-label="Активное изделие"></nav>
+        <div class="header-actions">
+          <button id="toggleEditor" class="product-tab settings-tab" type="button" title="Редактировать настройки">Настройки</button>
+        </div>
+      </header>
+
+      <section class="viewport-panel" aria-label="3D wardrobe viewport">
+        <canvas id="wardrobeCanvas"></canvas>
+      </section>
+
+      <aside class="detail-panel" id="detailPanel" aria-label="Просмотр детали">
+        <div class="detail-header">
+          <span class="detail-kicker">Деталь</span>
+          <strong id="detailTitle">Изделие</strong>
+        </div>
+        <div class="detail-drawing" id="detailDrawing"></div>
+        <dl class="detail-specs" id="detailSpecs"></dl>
+        <p id="detailDescription"></p>
+      </aside>
+
+      <aside class="config-panel" id="configPanel" aria-label="Wardrobe configuration">
+        <div class="panel-header">
+          <div>
+            <h1>Конфиг изделия</h1>
+            <p>Правьте YAML, сцена перестраивается сразу.</p>
+          </div>
+          <label class="file-button">
+            <input id="configFile" type="file" accept=".yaml,.yml,text/yaml" />
+            Открыть
+          </label>
+        </div>
+        <textarea id="configEditor" spellcheck="false"></textarea>
+        <div class="panel-footer">
+          <span id="configStatus">Загрузка...</span>
+          <button id="downloadConfig" type="button">Скачать YAML</button>
+        </div>
+      </aside>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
