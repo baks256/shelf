@@ -19,9 +19,7 @@ products:
 
     vars:
       size:
-        width: 1700
-        height: 2750
-        depth: 500
+        width, height, depth: 1700, 2750, 500
       thickness:
         default: 18
         sides: 18
@@ -44,9 +42,7 @@ products:
         depthFromBack: 330
 
     dimensions:
-      width: @size.width
-      height: @size.height
-      depth: @size.depth
+      width, height, depth: @size.width, @size.height, @size.depth
 
     boardThickness:
       default: @thickness.default
@@ -82,118 +78,76 @@ products:
 
     verticalDividers:
       - id: left-main-divider
-        colBoundary: 1
-        fromFloor: 0
-        toTop: @size.height
+        colBoundary, fromFloor, toTop: 1, 0, @size.height
       - id: basket-center-divider
-        colBoundary: 2
-        fromFloor: 0
-        toTop: @baskets.height
+        colBoundary, fromFloor, toTop: 2, 0, @baskets.height
       - id: upper-center-divider
-        colBoundary: 2
-        fromFloor: 1920
-        toTop: @size.height
+        colBoundary, fromFloor, toTop: 2, 1920, @size.height
 
     doors:
       - id: left-lower-door
-        col: 0
-        row: 0
-        colSpan: 1
-        rowSpan: 1
+        col, row, colSpan, rowSpan: 0, 0, 1, 1
         handle: right
       - id: left-upper-door
-        col: 0
-        row: 5
-        colSpan: 1
-        rowSpan: 1
+        col, row, colSpan, rowSpan: 0, 5, 1, 1
         handle: none
       - id: main-upper-left
-        col: 1
-        row: 5
-        colSpan: 1
-        rowSpan: 1
+        col, row, colSpan, rowSpan: 1, 5, 1, 1
         handle: none
         swing: left
       - id: main-upper-right
-        col: 2
-        row: 5
-        colSpan: 1
-        rowSpan: 1
+        col, row, colSpan, rowSpan: 2, 5, 1, 1
         handle: none
         swing: right
       - id: main-lower-left
-        col: 1
-        row: 0
-        colSpan: 1
-        rowSpan: 5
+        col, row, colSpan, rowSpan: 1, 0, 1, 5
         handle: center
         swing: left
       - id: main-lower-right
-        col: 2
-        row: 0
-        colSpan: 1
-        rowSpan: 5
+        col, row, colSpan, rowSpan: 2, 0, 1, 5
         handle: center
         swing: right
 
     openCells:
-      - col: 0
-        row: 1
+      - col, row: 0, 1
         items: books-vase
         light: true
-      - col: 0
-        row: 2
+      - col, row: 0, 2
         items: audio-vase
         light: true
-      - col: 0
-        row: 3
+      - col, row: 0, 3
         items: books-bowl
         light: true
-      - col: 0
-        row: 4
+      - col, row: 0, 4
         items: books-vase
         light: true
 
     internal:
       - id: left-upper-middle-shelf
-        col: 0
-        row: 5
-        colSpan: 1
+        col, row, colSpan: 0, 5, 1
         type: shelf
         position: middle
       - id: main-upper-middle-shelf
-        col: 1
-        row: 5
-        colSpan: 2
+        col, row, colSpan: 1, 5, 2
         type: shelf
         position: middle
       - id: divider-between-upper-and-main
-        col: 1
-        row: 5
-        colSpan: 2
+        col, row, colSpan: 1, 5, 2
         type: shelf
         position: bottom
       - id: shelf-above-baskets
-        col: 1
-        row: 0
-        colSpan: 2
+        col, row, colSpan: 1, 0, 2
         type: shelf
         heightFromFloor: @baskets.height
       - id: hanging-rail-above-baskets
-        col: 1
-        row: 1
-        rowSpan: 4
-        colSpan: 2
+        col, row, rowSpan, colSpan: 1, 1, 4, 2
         type: rail
         heightRatio: 0.9
         depthFromBack: @rail.depthFromBack
         material: brushedSteel
 
     baskets:
-      rows: 3
-      columns: 2
-      colStart: 1
-      colSpan: 2
+      rows, columns, colStart, colSpan: 3, 2, 1, 2
       heightFromFloorToTop: @baskets.height
       material: metalMeshBlack
 
@@ -203,22 +157,16 @@ products:
 
     vars:
       size:
-        width: 2300
-        height: 300
-        depth: 450
+        width, height, depth: 2300, 300, 450
       section:
         width: 575
       position:
         floorOffset: 150
       panel:
-        width: 2300
-        height: 3000
-        thickness: 20
+        width, height, thickness: 2300, 3000, 20
         bottomFromFloor: 450
       tv:
-        width: 1450
-        height: 830
-        thickness: 20
+        width, height, thickness: 1450, 830, 20
         bottomFromFloor: 900
       mesh:
         cellSize: 50
@@ -235,9 +183,7 @@ products:
         doors: 18
 
     dimensions:
-      width: @size.width
-      height: @size.height
-      depth: @size.depth
+      width, height, depth: @size.width, @size.height, @size.depth
 
     boardThickness:
       default: @thickness.default
@@ -254,22 +200,18 @@ products:
 
     boardTypes:
       bottom:
-        type: latticeX
-        cellSize: @mesh.cellSize
+        type, cellSize: latticeX, @mesh.cellSize
+        col, colSpan: 1, 2
 
     decorativeElements:
       - id: console-wall-panel
         type: wallPanel
-        width: @panel.width
-        height: @panel.height
-        thickness: @panel.thickness
+        width, height, thickness: @panel.width, @panel.height, @panel.thickness
         bottomFromFloor: @panel.bottomFromFloor
         material: smokedOak
       - id: tv-65
         type: tv
-        width: @tv.width
-        height: @tv.height
-        thickness: @tv.thickness
+        width, height, thickness: @tv.width, @tv.height, @tv.thickness
         bottomFromFloor: @tv.bottomFromFloor
         material: blackMetal
 
@@ -289,87 +231,49 @@ products:
 
     verticalDividers:
       - id: divider-1
-        colBoundary: 1
-        fromFloor: 0
-        toTop: @size.height
+        colBoundary, fromFloor, toTop: 1, 0, @size.height
       - id: divider-2
-        colBoundary: 2
-        fromFloor: 0
-        toTop: @size.height
+        colBoundary, fromFloor, toTop: 2, 0, @size.height
       - id: divider-3
-        colBoundary: 3
-        fromFloor: 0
-        toTop: @size.height
+        colBoundary, fromFloor, toTop: 3, 0, @size.height
 
     topCutouts:
       - id: wire-cutout
-        col: 1
-        colSpan: 2
-        clearanceDepth: @cutout.clearanceDepth
+        col, colSpan, clearanceDepth: 1, 2, @cutout.clearanceDepth
 
     doors:
       - id: console-door-1
-        col: 0
-        row: 0
-        colSpan: 1
-        rowSpan: 1
+        col, row, colSpan, rowSpan: 0, 0, 1, 1
         handle: none
       - id: console-door-2
-        col: 1
-        row: 0
-        colSpan: 1
-        rowSpan: 1
+        col, row, colSpan, rowSpan: 1, 0, 1, 1
         handle: none
         swing: left
       - id: console-door-3
-        col: 2
-        row: 0
-        colSpan: 1
-        rowSpan: 1
+        col, row, colSpan, rowSpan: 2, 0, 1, 1
         handle: none
         swing: right
       - id: console-door-4
-        col: 3
-        row: 0
-        colSpan: 1
-        rowSpan: 1
+        col, row, colSpan, rowSpan: 3, 0, 1, 1
         handle: none
         swing: right
 
     openCells:
-      - col: 1
-        row: 0
-      - col: 2
-        row: 0
+      - col, row: 1, 0
+      - col, row: 2, 0
 
     internal:
       - id: console-shelf-1
-        col: 0
-        row: 0
-        colSpan: 1
+        col, row, colSpan: 0, 0, 1
+        type: shelf
+        position: middle
+      - id: console-shelf-2
+        col, row, colSpan: 1, 0, 2
         type: shelf
         position: middle
         boardType: &meshShelf
-          type: latticeX
-          cellSize: @mesh.cellSize
-      - id: console-shelf-2
-        col: 1
-        row: 0
-        colSpan: 1
-        type: shelf
-        position: middle
-        boardType: *meshShelf
-      - id: console-shelf-3
-        col: 2
-        row: 0
-        colSpan: 1
-        type: shelf
-        position: middle
-        boardType: *meshShelf
+          type, cellSize: latticeX, @mesh.cellSize
       - id: console-shelf-4
-        col: 3
-        row: 0
-        colSpan: 1
+        col, row, colSpan: 3, 0, 1
         type: shelf
         position: middle
-        boardType: *meshShelf

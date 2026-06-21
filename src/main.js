@@ -8,7 +8,7 @@ import { foldAll, unfoldAll } from "@codemirror/language";
 
 const MM_TO_M = 0.001;
 const DEFAULT_BOARD_THICKNESS = 18 * MM_TO_M;
-const DOOR_GAP = 0.012;
+const DOOR_GAP = 0.003;
 
 const canvas = document.querySelector("#wardrobeCanvas");
 const editor = document.querySelector("#configEditor");
@@ -186,7 +186,26 @@ function applyConfigText(text) {
 }
 
 function normalizeConfigReferenceSyntax(text) {
-  return text.replace(/(:\s*)(@[A-Za-z0-9_.-]+)(\s*(?:#.*)?$)/gm, '$1"$2"$3');
+  return text
+    .replace(
+      /^(\s*)-\s+([A-Za-z_][\w-]*(?:\s*,\s*[A-Za-z_][\w-]*)+)\s*:\s*([^#\n]+?)(\s*(?:#.*)?$)/gm,
+      (_, indent, keysText, valuesText, tail) => {
+        const keys = keysText.split(/\s*,\s*/).filter(Boolean);
+        const values = valuesText.includes(",") ? valuesText.split(/\s*,\s*/) : valuesText.trim().split(/\s+/);
+        if (keys.length !== values.length || values.some((value) => value === "")) return `${indent}- ${keysText}: ${valuesText}${tail}`;
+        return [`${indent}- ${keys[0]}: ${values[0]}`, ...keys.slice(1).map((key, index) => `${indent}  ${key}: ${values[index + 1]}`)].join("\n") + tail;
+      },
+    )
+    .replace(
+      /^(\s*)([A-Za-z_][\w-]*(?:\s*,\s*[A-Za-z_][\w-]*)+)\s*:\s*([^#\n]+?)(\s*(?:#.*)?$)/gm,
+      (_, indent, keysText, valuesText, tail) => {
+        const keys = keysText.split(/\s*,\s*/).filter(Boolean);
+        const values = valuesText.includes(",") ? valuesText.split(/\s*,\s*/) : valuesText.trim().split(/\s+/);
+        if (keys.length !== values.length || values.some((value) => value === "")) return `${indent}${keysText}: ${valuesText}${tail}`;
+        return keys.map((key, index) => `${indent}${key}: ${values[index]}`).join("\n") + tail;
+      },
+    )
+    .replace(/(:\s*)(@[A-Za-z0-9_.-]+)(\s*(?:#.*)?$)/gm, '$1"$2"$3');
 }
 
 function getInitialActiveProductId(config) {
@@ -297,7 +316,15 @@ function renderWardrobe(config) {
   registerHoverDetail(addPanel(sideT, height, depth, [-left - sideT / 2, bottom + height / 2, 0], carcass, "right-side"), "Правая боковина", sideT, height, depth, "Правая вертикальная боковая деталь корпуса.");
   registerHoverDetail(addPanel(width, height, backT, [0, bottom + height / 2, backZ + backT / 2], back, "back"), "Задник", width, height, backT, "Задняя панель корпуса.");
 
-  applyNamedBoardType(root.getObjectByName("bottom"), config.boardTypes?.bottom, width, bottomT, depth, bottom + bottomT + 0.003);
+  applyNamedBoardType(
+    root.getObjectByName("bottom"),
+    config.boardTypes?.bottom,
+    width,
+    bottomT,
+    depth,
+    bottom + bottomT + 0.003,
+    getBoardTypeSpan(config.boardTypes?.bottom, columnEdges, left, width),
+  );
 
   addVerticalDividers(config, columnEdges, rowEdges, left, bottom + height, depth, carcass);
 
@@ -354,11 +381,11 @@ function addDoor(config, door, columnEdges, rowEdges, left, depth, doorMaterial)
   const y0 = rowEdges[door.row];
   const y1 = rowEdges[door.row + rowSpan];
   const section = { x0, x1, y0, y1 };
-  const w = x1 - x0 - DOOR_GAP;
-  const h = y1 - y0 - DOOR_GAP;
+  const w = Math.max(0.03, x1 - x0 - DOOR_GAP);
+  const h = Math.max(0.03, y1 - y0 - DOOR_GAP);
   const hingeSide = getHingeSide(door, x0, x1);
   const hingeX = hingeSide === "left" ? x0 + DOOR_GAP / 2 : x1 - DOOR_GAP / 2;
-  const frontZ = depth / 2 - doorT / 2;
+  const frontZ = depth / 2 + doorT / 2 + 0.002;
   const doorGroup = new THREE.Group();
   doorGroup.name = `${door.id}-pivot`;
   doorGroup.position.set(hingeX, y0 + DOOR_GAP / 2, frontZ);
@@ -398,6 +425,27 @@ function addDoor(config, door, columnEdges, rowEdges, left, depth, doorMaterial)
 
 function isLatticeDoor(door) {
   return ["latticeX", "latticePlus", "latticeVertical", "latticeHorizontal"].includes(door.type);
+}
+
+function getDoorOpening(config, door, columnEdges, rowEdges, left) {
+  const colSpan = door.colSpan ?? 1;
+  const rowSpan = door.rowSpan ?? 1;
+  const rawX0 = left + columnEdges[door.col];
+  const rawX1 = left + columnEdges[door.col + colSpan];
+  const rawY0 = rowEdges[door.row];
+  const rawY1 = rowEdges[door.row + rowSpan];
+  const middleY = (rawY0 + rawY1) / 2;
+  const x0 = rawX0 + boundaryInset(config, door.col, middleY);
+  const x1 = rawX1 - boundaryInset(config, door.col + colSpan, middleY);
+  const y0 = rawY0 + horizontalBoundaryInset(config, door.row);
+  const y1 = rawY1 - horizontalBoundaryInset(config, door.row + rowSpan);
+  return { x0, x1, y0, y1 };
+}
+
+function horizontalBoundaryInset(config, rowBoundary) {
+  if (rowBoundary <= 0) return boardThickness(config, "bottom");
+  if (rowBoundary >= config.rows.length) return boardThickness(config, "top");
+  return boardThickness(config, "shelves") * 0.5;
 }
 
 function getDoorDetailExtra(door, width, height) {
@@ -1082,17 +1130,57 @@ function normalizeBoardType(value) {
   return value;
 }
 
-function applyNamedBoardType(mesh, value, width, height, depth, y) {
+function getBoardTypeSpan(value, columnEdges, left, fullWidth) {
+  const boardType = normalizeBoardType(value);
+  if (!boardType || typeof boardType.col !== "number") return { width: fullWidth, offsetX: 0, partial: false };
+  const colSpan = boardType.colSpan ?? 1;
+  const x0 = left + columnEdges[boardType.col];
+  const x1 = left + columnEdges[boardType.col + colSpan];
+  return {
+    x0,
+    x1,
+    width: Math.max(0.01, x1 - x0),
+    offsetX: (x0 + x1) / 2,
+    partial: true,
+  };
+}
+
+function applyNamedBoardType(mesh, value, width, height, depth, y, span = null) {
   const boardType = normalizeBoardType(value);
   if (!mesh || !boardType?.type) return;
+  const patternWidth = span?.width ?? width;
+  const offsetX = span?.offsetX ?? 0;
+  const originalMaterial = mesh.material;
   if (boardType.type === "latticeX") {
     makeMeshInvisiblePickSurface(mesh);
-    addHorizontalBoardLattice(mesh, width, height, depth, boardType);
+    if (span?.partial) addHorizontalBoardSolidRemainders(mesh, width, height, depth, span, originalMaterial);
+    addHorizontalBoardLattice(mesh, patternWidth, height, depth, boardType, offsetX);
   } else {
-    addHorizontalBoardPattern(mesh, width, depth, boardType, y);
-    addFrontBoardPattern(mesh, width, height, depth, boardType);
+    addHorizontalBoardPattern(mesh, patternWidth, depth, boardType, y);
+    addFrontBoardPattern(mesh, patternWidth, height, depth, boardType);
   }
-  if (mesh.userData.detail) Object.assign(mesh.userData.detail, getBoardDetailExtra(boardType, width, depth));
+  if (mesh.userData.detail) Object.assign(mesh.userData.detail, getBoardDetailExtra(boardType, patternWidth, depth));
+}
+
+function addHorizontalBoardSolidRemainders(mesh, width, height, depth, span, mat) {
+  const fullX0 = mesh.position.x - width / 2;
+  const fullX1 = mesh.position.x + width / 2;
+  const segments = [
+    { x0: fullX0, x1: span.x0 },
+    { x0: span.x1, x1: fullX1 },
+  ];
+
+  for (const segment of segments) {
+    const segmentWidth = segment.x1 - segment.x0;
+    if (segmentWidth <= 0.001) continue;
+    const solid = new THREE.Mesh(new THREE.BoxGeometry(segmentWidth, height, depth), mat);
+    solid.name = `${mesh.name}-solid-segment`;
+    solid.position.set((segment.x0 + segment.x1) / 2, mesh.position.y, mesh.position.z);
+    solid.castShadow = true;
+    solid.receiveShadow = true;
+    addSketchEdges(solid, 0x0b0b0b, 0.72);
+    root.add(solid);
+  }
 }
 
 function makeMeshInvisiblePickSurface(mesh) {
@@ -1101,7 +1189,11 @@ function makeMeshInvisiblePickSurface(mesh) {
     transparent: true,
     opacity: 0,
     depthWrite: false,
+    depthTest: false,
   });
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
+  mesh.renderOrder = -1000;
   for (const child of mesh.children) child.visible = false;
 }
 
@@ -1144,7 +1236,7 @@ function addHorizontalBoardPattern(mesh, width, depth, boardType, y) {
   root.add(lines);
 }
 
-function addHorizontalBoardLattice(mesh, width, height, depth, boardType) {
+function addHorizontalBoardLattice(mesh, width, height, depth, boardType, offsetX = 0) {
   const targetCell = Math.max(0.025, (boardType.cellSize ?? 50) * MM_TO_M);
   const cols = Math.max(1, boardType.cellsX ?? Math.round(width / targetCell));
   const rows = Math.max(1, boardType.cellsY ?? Math.round(depth / targetCell));
@@ -1156,6 +1248,7 @@ function addHorizontalBoardLattice(mesh, width, height, depth, boardType) {
   const group = new THREE.Group();
   group.name = `${mesh.name}-board-lattice`;
   group.position.copy(mesh.position);
+  group.position.x = offsetX;
   root.add(group);
 
   const addBar = (name, barWidth, barDepth, x, z, rotationY = 0) => {
@@ -1847,11 +1940,8 @@ function onCanvasPointerUp(event) {
   const picked = pickInteractive(event);
   if (picked?.object?.userData?.clickDoor) {
     const objectKey = picked.object.userData.objectKey ?? `door:${picked.object.userData.clickDoor.userData.door.id}`;
-    if (selectedObjectKey !== objectKey) {
-      selectedObjectKey = objectKey;
-      updateDetailPanel(picked.object.userData.detail);
-      return;
-    }
+    selectedObjectKey = objectKey;
+    updateDetailPanel(picked.object.userData.detail);
 
     const doorGroup = picked.object.userData.clickDoor;
     const id = doorGroup.userData.door.id;
