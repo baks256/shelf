@@ -87,8 +87,8 @@ let pointerDown = null;
 let renderFrameId = 0;
 
 const materialLibrary = {
-  darkWalnut: makeSketchMaterial(0xf2f2ed, 0x151515, 0.08),
-  smokedOak: makeSketchMaterial(0xe9e9e3, 0x151515, 0.05),
+  darkWalnut: makeSketchMaterial(0xd2d2ca, 0x0f0f0f, 0.11),
+  smokedOak: makeSketchMaterial(0xc7c7be, 0x0f0f0f, 0.08),
   warmLed: new THREE.MeshBasicMaterial({ color: 0xffc27a }),
   metalMeshBlack: new THREE.MeshStandardMaterial({
     color: 0x050505,
@@ -2034,7 +2034,7 @@ function pickPriority(object) {
 function highlightDetail(mesh) {
   if (highlightedDetailEdges?.userData?.source === mesh) return;
   if (highlightedDetailEdges) {
-    root.remove(highlightedDetailEdges);
+    highlightedDetailEdges.parent?.remove(highlightedDetailEdges);
     disposeObject(highlightedDetailEdges);
     highlightedDetailEdges = null;
   }
@@ -2050,13 +2050,14 @@ function highlightDetail(mesh) {
       transparent: true,
       opacity: 1,
       depthWrite: false,
+      depthTest: false,
     }),
   );
-  mesh.updateWorldMatrix(true, false);
-  edges.applyMatrix4(mesh.matrixWorld);
+  edges.scale.setScalar(1.004);
+  edges.renderOrder = 1000;
   edges.userData.source = mesh;
   highlightedDetailEdges = edges;
-  root.add(edges);
+  mesh.add(edges);
   scheduleRender();
 }
 
